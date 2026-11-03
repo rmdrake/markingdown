@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown Editor</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  body {
+    --bg: #ffffff;
+    --bg-alt: #f5f6f8;
+    --fg: #1c1e21;
+    --fg-muted: #6b707a;
+    --border: #d9dcdf;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --code-bg: #f0f1f3;
+    --blockquote-bar: #cbd0d6;
+    --table-stripe: #f7f8fa;
+  }
+  body[data-mode="dark"] {
+    --bg: #1c1e21;
+    --bg-alt: #24262b;
+    --fg: #e5e7eb;
+    --fg-muted: #9aa0a8;
+    --border: #3a3d44;
+    --accent: #3b82f6;
+    --accent-hover: #60a5fa;
+    --code-bg: #2a2c31;
+    --blockquote-bar: #4b5159;
+    --table-stripe: #22242a;
+  }
+
+  body[data-scheme="ocean"][data-mode="light"] {
+    --bg-alt: #eaf2f8;
+    --code-bg: #edf4fa;
+    --table-stripe: #f5fafd;
+    --accent: #0284c7;
+    --accent-hover: #075e8c;
+  }
+  body[data-scheme="ocean"][data-mode="dark"] {
+    --bg: #1a2129;
+    --bg-alt: #222c36;
+    --code-bg: #283440;
+    --table-stripe: #1f272f;
+    --accent: #38bdf8;
+    --accent-hover: #7dd3fc;
+  }
+  body[data-scheme="desert"][data-mode="light"] {
+    --bg-alt: #f7efe6;
+    --code-bg: #f4eadd;
+    --table-stripe: #faf4ec;
+    --accent: #c2410c;
+    --accent-hover: #9a3412;
+  }
+  body[data-scheme="desert"][data-mode="dark"] {
+    --bg: #271f18;
+    --bg-alt: #302821;
+    --code-bg: #362c23;
+    --table-stripe: #2b241d;
+    --accent: #fb923c;
+    --accent-hover: #fdba74;
+  }
+  body[data-scheme="forest"][data-mode="light"] {
+    --bg-alt: #ecf3ec;
+    --code-bg: #eaf1ea;
+    --table-stripe: #f3f8f3;
+    --accent: #15803d;
+    --accent-hover: #166534;
+  }
+  body[data-scheme="forest"][data-mode="dark"] {
+    --bg: #1c221c;
+    --bg-alt: #242c24;
+    --code-bg: #2a322a;
+    --table-stripe: #202820;
+    --accent: #4ade80;
+    --accent-hover: #86efac;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    display: flex;
+    flex-direction: column;
+    transition: background-color 0.3s, color 0.3s;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    transition: background-color 0.3s, border-color 0.3s;
+  }
+
+  header h1 { font-size: 1rem; font-weight: 600; white-space: nowrap; }
+
+  .toolbar { display: flex; gap: 8px; }
+
+  button {
+    font: inherit;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--fg);
+    cursor: pointer;
+    transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  #themeSchemeSelect {
+    font: inherit;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--fg);
+    cursor: pointer;
+    transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+  }
+
+  main {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+
+  .pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+  .pane + .pane { border-left: 1px solid var(--border); }
+
+  .pane-header {
+    padding: 8px 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    transition: background-color 0.3s, border-color 0.3s;
+  }
+
+  #editor {
+    flex: 1;
+    width: 100%;
+    resize: none;
+    border: none;
+    outline: none;
+    padding: 14px;
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    background: var(--bg);
+    color: var(--fg);
+    transition: background-color 0.3s, color 0.3s;
+  }
+  #editor:focus { box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.15); }
+
+  .sr-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    transition: background-color 0.3s, border-color 0.3s;
+  }
+  #srPanel[hidden] { display: none; }
+
+  .sr-row { display: flex; gap: 6px; align-items: center; }
+
+  .sr-row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    padding: 5px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--fg);
+    transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+  }
+
+  .sr-count { font-size: 0.75rem; color: var(--fg-muted); white-space: nowrap; }
+
+  .sr-case {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .preview-wrap { flex: 1; overflow-y: auto; min-height: 0; }
+
+  .markdown-body { padding: 14px 18px; line-height: 1.65; max-width: 900px; }
+  .markdown-body > :first-child { margin-top: 0; }
+  .markdown-body h1, .markdown-body h2, .markdown-body h3,
+  .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+    margin: 1.2em 0 0.5em;
+    line-height: 1.3;
+  }
+  .markdown-body h1 { font-size: 1.7rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  .markdown-body h2 { font-size: 1.4rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  .markdown-body p, .markdown-body ul, .markdown-body ol, .markdown-body table, .markdown-body blockquote, .markdown-body pre { margin-bottom: 0.9em; }
+  .markdown-body a { color: var(--accent); }
+  .markdown-body code {
+    background: var(--code-bg);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.875em;
+  }
+  .markdown-body pre {
+    background: var(--code-bg);
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+  }
+  .markdown-body pre code { padding: 0; background: none; }
+  .markdown-body blockquote {
+    border-left: 4px solid var(--blockquote-bar);
+    padding: 2px 12px;
+    color: var(--fg-muted);
+  }
+  .markdown-body ul, .markdown-body ol { padding-left: 1.5em; }
+  .markdown-body table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+  .markdown-body th { background: var(--bg-alt); }
+  .markdown-body tr:nth-child(even) td { background: var(--table-stripe); }
+  .markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+  .markdown-body img { max-width: 100%; }
+
+  footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 14px;
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    background: var(--bg-alt);
+    border-top: 1px solid var(--border);
+    transition: background-color 0.3s, border-color 0.3s;
+  }
+
+  #fileInput { display: none; }
+
+  @media (max-width: 768px) {
+    main { flex-direction: column; }
+    .pane + .pane { border-left: none; border-top: 1px solid var(--border); }
+    header h1 { font-size: 0.9rem; }
+    button { padding: 5px 8px; font-size: 0.8rem; }
+  }
+</style>
+</head>
+<body data-mode="light" data-scheme="">
+
+<header>
+  <h1>Markdown Editor</h1>
+  <div class="toolbar" role="group" aria-label="Editor actions">
+    <button id="openBtn" type="button" aria-label="Open a markdown or text file">Open</button>
+    <button id="saveBtn" type="button" aria-label="Save content as a markdown file">Save</button>
+    <button id="saveAsBtn" type="button" aria-label="Save content under a new filename">Save As</button>
+    <button id="findBtn" type="button" aria-label="Open the find and replace panel">Find</button>
+    <select id="themeSchemeSelect" aria-label="Choose color scheme">
+      <option value="">Space</option>
+      <option value="ocean">Ocean</option>
+      <option value="desert">Desert</option>
+      <option value="forest">Forest</option>
+    </select>
+    <button id="themeBtn" type="button" aria-label="Toggle light and dark theme" aria-pressed="false">🌙</button>
+  </div>
+</header>
+
+<main>
+  <section class="pane" aria-label="Markdown editor pane">
+    <div class="pane-header">Editor</div>
+    <div id="srPanel" class="sr-panel" hidden>
+      <div class="sr-row">
+        <input type="text" id="findInput" placeholder="Find..." aria-label="Search text">
+        <span id="matchCount" class="sr-count" role="status"></span>
+        <button id="prevMatchBtn" type="button" title="Previous match (Shift+Enter)" aria-label="Previous match">&#8593;</button>
+        <button id="nextMatchBtn" type="button" title="Next match (Enter)" aria-label="Next match">&#8595;</button>
+        <button id="srCloseBtn" type="button" title="Close search (Escape)" aria-label="Close search">&times;</button>
+      </div>
+      <div class="sr-row">
+        <input type="text" id="replaceInput" placeholder="Replace with..." aria-label="Replacement text">
+        <label class="sr-case"><input type="checkbox" id="caseSensitiveChk"> Aa</label>
+      </div>
+      <div class="sr-row">
+        <button id="replaceOneBtn" type="button">Replace</button>
+        <button id="replaceAllBtn" type="button">Replace All</button>
+      </div>
+    </div>
+    <textarea id="editor" spellcheck="true" aria-label="Markdown input"
+      placeholder="# Start writing markdown here...&#10;&#10;Type **bold**, *italic*, `code`, and more. The preview updates as you type."></textarea>
+  </section>
+  <section class="pane" aria-label="Preview pane">
+    <div class="pane-header">Preview</div>
+    <div class="preview-wrap">
+      <div id="preview" class="markdown-body" role="document" aria-live="polite"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span id="fileName">untitled.md</span>
+  <span id="charCount" aria-label="Character count">0 characters</span>
+</footer>
+
+<input type="file" id="fileInput" accept=".md,.markdown,.txt,text/markdown,text/plain,application/octet-stream" aria-hidden="true" tabindex="-1">
+
+<script>
+(function () {
+  "use strict";
+
+  var editor = document.getElementById("editor");
+  var preview = document.getElementById("preview");
+  var fileInput = document.getElementById("fileInput");
+  var openBtn = document.getElementById("openBtn");
+  var saveBtn = document.getElementById("saveBtn");
+  var saveAsBtn = document.getElementById("saveAsBtn");
+  var themeBtn = document.getElementById("themeBtn");
+  var schemeSelect = document.getElementById("themeSchemeSelect");
+  var fileNameEl = document.getElementById("fileName");
+  var charCountEl = document.getElementById("charCount");
+
+  var THEME_KEY = "markdown-editor-theme";
+  var MODE_KEY = "markdown-editor-mode";
+  var SCHEME_KEY = "markdown-editor-scheme";
+  var currentFileName = "untitled.md";
+  var objectUrl = null;
+
+  function updatePreview() {
+    if (window.marked) {
+      preview.innerHTML = marked.parse(editor.value);
+    } else {
+      preview.textContent = editor.value || "";
+      preview.style.whiteSpace = "pre-wrap";
+    }
+  }
+
+  function updateCharCount() {
+    var n = editor.value.length;
+    charCountEl.textContent = n + (n === 1 ? " character" : " characters");
+  }
+
+  function setFileName(name) {
+    currentFileName = name || "untitled.md";
+    fileNameEl.textContent = currentFileName;
+  }
+
+  // --- File operations ---------------------------------------------------
+
+  openBtn.addEventListener("click", function () { fileInput.click(); });
+
+  fileInput.addEventListener("change", function () {
+    var file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+
+    if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+
+    // Remember the loaded file for a potential future overwrite-save.
+    var reader = new FileReader();
+    reader.onload = function () {
+      editor.value = String(reader.result || "");
+      setFileName(file.name);
+      updatePreview();
+      updateCharCount();
+      editor.focus();
+    };
+    reader.onerror = function () { window.alert("Could not read that file. Please try again."); };
+    reader.readAsText(file);
+
+    fileInput.value = ""; // allow re-loading the same file later
+  });
+
+  function download(name) {
+    var blob = new Blob([editor.value], { type: "text/markdown;charset=utf-8" });
+
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(blob);
+
+    try {
+      var a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = name || currentFileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      window.alert("Save failed: " + err.message);
+    }
+  }
+
+  saveBtn.addEventListener("click", function () {
+    download(currentFileName);
+  });
+
+  saveAsBtn.addEventListener("click", function () {
+    var name = window.prompt("Save file as:", currentFileName || "");
+    if (name === null) return; // cancelled
+    name = name.trim();
+    if (!name) return;
+
+    setFileName(name);
+    download(name);
+  });
+
+  // --- Theme system ------------------------------------------------------
+
+  var VALID_SCHEMES = ["", "ocean", "desert", "forest"];
+
+  function applyMode(theme) {
+    document.body.setAttribute("data-mode", theme);
+    var isDark = theme === "dark";
+    themeBtn.textContent = isDark ? "\u2600\uFE0F" : "\uD83C\uDF19";
+    themeBtn.setAttribute("aria-pressed", String(isDark));
+    themeBtn.setAttribute("aria-label", isDark
+      ? "Switch to light mode"
+      : "Switch to dark mode");
+  }
+
+  function applyScheme(scheme) {
+    scheme = String(scheme || "").toLowerCase();
+    if (VALID_SCHEMES.indexOf(scheme) === -1) scheme = "";
+    document.body.setAttribute("data-scheme", scheme);
+  }
+
+  function initialMode() {
+    var saved = null;
+    try { saved = window.localStorage.getItem(MODE_KEY); } catch (e) {}
+    if (saved === "light" || saved === "dark") return saved;
+
+    // Legacy key from earlier versions of this tool.
+    try {
+      var legacy = window.localStorage.getItem(THEME_KEY);
+      if (legacy === "light" || legacy === "dark") return legacy;
+    } catch (e) {}
+
+    var preferredDark = false;
+    try {
+      preferredDark = window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches;
+    } catch (e) {}
+    return preferredDark ? "dark" : "light";
+  }
+
+  function initialScheme() {
+    var saved = null;
+    try { saved = window.localStorage.getItem(SCHEME_KEY); } catch (e) {}
+    // "space" was removed as a distinct scheme; that option is now the default.
+    if (String(saved).toLowerCase() === "space") saved = "";
+    var scheme = String(saved || "").toLowerCase();
+    if (VALID_SCHEMES.indexOf(scheme) === -1) return "";
+    if (scheme !== String(saved)) {
+      try { window.localStorage.setItem(SCHEME_KEY, scheme); } catch (e) {}
+    }
+    return scheme;
+  }
+
+  themeBtn.addEventListener("click", function () {
+    var next = document.body.getAttribute("data-mode") === "dark" ? "light" : "dark";
+    applyMode(next);
+    try { window.localStorage.setItem(MODE_KEY, next); } catch (e) {}
+  });
+
+  schemeSelect.addEventListener("change", function () {
+    applyScheme(schemeSelect.value);
+    try { window.localStorage.setItem(SCHEME_KEY, schemeSelect.value); } catch (e) {}
+  });
+
+  // --- Editor behaviour --------------------------------------------------
+
+  editor.addEventListener("input", updatePreview);
+  editor.addEventListener("keyup", function () { updateCharCount(); });
+  editor.addEventListener("change", function () { updatePreview(); updateCharCount(); });
+
+  // Tab inserts two spaces; Shift+Tab removes up to two leading spaces.
+  editor.addEventListener("keydown", function (event) {
+    if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return;
+
+    var value = editor.value;
+    var start = editor.selectionStart;
+    var end = editor.selectionEnd;
+
+    if (!event.shiftKey) {
+      event.preventDefault();
+      editor.value = value.slice(0, start) + "  " + value.slice(end);
+      editor.selectionStart = editor.selectionEnd = start + 2;
+    } else {
+      var lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      var match = /^ {1,2}/.exec(value.slice(lineStart, start));
+      if (!match) return; // let the browser handle it if no leading spaces
+      event.preventDefault();
+      editor.value = value.slice(0, start - match[0].length) + value.slice(end);
+      editor.selectionStart = editor.selectionEnd = start - match[0].length;
+    }
+
+    updatePreview();
+    updateCharCount();
+  });
+
+  // --- Search & replace --------------------------------------------------
+
+  var srPanel = document.getElementById("srPanel");
+  var findInput = document.getElementById("findInput");
+  var replaceInput = document.getElementById("replaceInput");
+  var matchCountEl = document.getElementById("matchCount");
+  var caseChk = document.getElementById("caseSensitiveChk");
+  var prevBtn = document.getElementById("prevMatchBtn");
+  var nextBtn = document.getElementById("nextMatchBtn");
+  var closeBtn = document.getElementById("srCloseBtn");
+  var replaceOneBtn = document.getElementById("replaceOneBtn");
+  var replaceAllBtn = document.getElementById("replaceAllBtn");
+
+  function srCaseSensitive() { return caseChk.checked; }
+
+  function srMatches(query) {
+    if (!query) return [];
+    var text = editor.value;
+    var hay = srCaseSensitive() ? text : text.toLowerCase();
+    var needle = srCaseSensitive() ? query : query.toLowerCase();
+    var matches = [];
+    var from = 0;
+    while (true) {
+      var idx = hay.indexOf(needle, from);
+      if (idx === -1) break;
+      matches.push({ start: idx, end: idx + needle.length });
+      from = idx + Math.max(needle.length, 1);
+    }
+    return matches;
+  }
+
+  function srShowCount(matches, activeIndex) {
+    if (!findInput.value) {
+      matchCountEl.textContent = "";
+      return;
+    }
+    if (matches.length === 0) {
+      matchCountEl.textContent = "No matches";
+    } else {
+      matchCountEl.textContent = (activeIndex + 1) + "/" + matches.length;
+    }
+  }
+
+  function srSelectMatch(matches, index) {
+    if (!matches.length) return null;
+    var active = ((index % matches.length) + matches.length) % matches.length;
+    var m = matches[active];
+    // Do NOT focus the editor here: this is also called on every keystroke in
+    // the find box, and focusing would yank the caret out of the input. Callers
+    // that need to move focus do so explicitly.
+    editor.selectionStart = m.start;
+    editor.selectionEnd = m.end;
+    srShowCount(matches, active);
+    return active;
+  }
+
+  function srNavigate(direction) {
+    var query = findInput.value;
+    if (!query) { srShowCount([], -1); return; }
+    var matches = srMatches(query);
+    if (!matches.length) { srShowCount(matches, -1); return; }
+
+    var index = 0;
+    var cursor = editor.selectionEnd;
+    var foundCurrent = false;
+
+    // If the current selection is a match, keep it as the starting point.
+    for (var i = 0; i < matches.length; i++) {
+      if (matches[i].start === editor.selectionStart && matches[i].end === editor.selectionEnd) {
+        index = i + (direction > 0 ? 1 : -1);
+        foundCurrent = true;
+        break;
+      }
+    }
+
+    if (!foundCurrent) {
+      // Otherwise start from the match after the cursor.
+      var firstAfter = -1;
+      for (var j = 0; j < matches.length; j++) {
+        if (matches[j].start >= cursor) { firstAfter = j; break; }
+      }
+      index = direction > 0
+        ? (firstAfter === -1 ? 0 : firstAfter)
+        : (matches.length - 1);
+    }
+
+    srSelectMatch(matches, index);
+  }
+
+  function openSearchPanel(preselect) {
+    srPanel.hidden = false;
+    if (preselect && !findInput.value) {
+      var sel = editor.value.slice(editor.selectionStart, editor.selectionEnd);
+      if (sel && !/\n/.test(sel)) findInput.value = sel;
+    }
+    findInput.focus();
+  }
+
+  function closeSearchPanel() {
+    srPanel.hidden = true;
+    matchCountEl.textContent = "";
+    editor.focus();
+  }
+
+  findInput.addEventListener("input", function () {
+    var matches = srMatches(findInput.value);
+    if (matches.length) srSelectMatch(matches, 0); else srShowCount(matches, -1);
+  });
+
+  // Scroll the editor so that the line containing "start" is centered in the
+  // viewport as closely as possible (clamped for content shorter than the view).
+  function srScrollToSelection(start) {
+    var cs = null;
+    try { cs = window.getComputedStyle(editor); } catch (e) {}
+    if (!cs) return;
+
+    var lineHeight = parseFloat(cs.lineHeight);
+    if (!lineHeight || !isFinite(lineHeight)) {
+      // The editor CSS uses line-height: 1.6; fall back to that ratio.
+      lineHeight = (parseFloat(cs.fontSize) || 14) * 1.6;
+    }
+    var paddingTop = parseFloat(cs.paddingTop) || 0;
+    if (!lineHeight || !editor.clientHeight) return;
+
+    var text = editor.value;
+    var currentLine = 0;
+    for (var i = 0; i < start && i < text.length; i++) {
+      if (text.charCodeAt(i) === 10) currentLine++;
+    }
+
+    var lineTop = paddingTop + currentLine * lineHeight;
+    // Position scrollTop so the middle of that line sits at the middle of the view.
+    var target = lineTop - editor.clientHeight / 2 + lineHeight / 2;
+    if (target < 0) target = 0;
+
+    var maxScroll = Math.max(0, editor.scrollHeight - editor.clientHeight);
+    if (target > maxScroll) target = maxScroll;
+
+    editor.scrollTop = target;
+  }
+
+  function revealMatchInEditor() {
+    if (!findInput.value) return;
+    editor.focus();
+    srScrollToSelection(editor.selectionStart);
+  }
+
+  findInput.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") { event.preventDefault(); srNavigate(event.shiftKey ? -1 : 1); revealMatchInEditor(); }
+    else if (event.key === "Escape") closeSearchPanel();
+  });
+
+  replaceInput.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); doReplaceOne(); }
+  });
+
+  prevBtn.addEventListener("click", function () { srNavigate(-1); revealMatchInEditor(); });
+  nextBtn.addEventListener("click", function () { srNavigate(1); revealMatchInEditor(); });
+  closeBtn.addEventListener("click", closeSearchPanel);
+
+  var findBtn = document.getElementById("findBtn");
+  findBtn.addEventListener("click", function () { openSearchPanel(false); });
+  replaceOneBtn.addEventListener("click", function () { doReplaceOne(); revealMatchInEditor(); });
+  replaceAllBtn.addEventListener("click", function () { doReplaceAll(); revealMatchInEditor(); });
+
+  function doReplaceOne() {
+    var query = findInput.value;
+    if (!query) return;
+    var value = editor.value;
+    var start = editor.selectionStart;
+    var end = editor.selectionEnd;
+    var needleLen = query.length;
+    var segment = value.slice(start, end);
+
+    function eq(a, b) { return srCaseSensitive() ? a === b : a.toLowerCase() === b.toLowerCase(); }
+
+    if (segment.length !== needleLen || !eq(segment, query)) {
+      // Selection isn't the current match; jump to the next one first.
+      srNavigate(1);
+      start = editor.selectionStart;
+      end = editor.selectionEnd;
+      value = editor.value;
+      segment = value.slice(start, end);
+    }
+
+    if (segment.length !== needleLen || !eq(segment, query)) return; // no matches left
+
+    var replacement = replaceInput.value;
+    editor.value = value.slice(0, start) + replacement + value.slice(end);
+    editor.selectionStart = editor.selectionEnd = start + replacement.length;
+    updatePreview();
+    updateCharCount();
+    srNavigate(1); // move on to the next match (or wrap around)
+  }
+
+  function doReplaceAll() {
+    var query = findInput.value;
+    if (!query) return;
+    var value = editor.value;
+    var replacement = replaceInput.value;
+    var newLength, replaced = 0;
+
+    if (srCaseSensitive()) {
+      var parts = value.split(query);
+      newLength = parts.join(replacement).length;
+      replaced = parts.length - 1;
+      editor.value = parts.join(replacement);
+    } else {
+      // Case-insensitive replacement without regex to avoid escaping issues.
+      var needle = query.toLowerCase();
+      var hay = value.toLowerCase();
+      var out = "";
+      var from = 0;
+      while (true) {
+        var idx = hay.indexOf(needle, from);
+        if (idx === -1) break;
+        out += value.slice(from, idx) + replacement;
+        replaced++;
+        from = idx + needle.length;
+      }
+      editor.value = out + value.slice(from);
+      newLength = editor.value.length;
+    }
+
+    var caretShift = (newLength - value.length) / Math.max(replaced, 1);
+    editor.selectionStart = editor.selectionEnd = Math.min(
+      Math.max(editor.selectionStart + caretShift * replaced, 0),
+      newLength
+    );
+    updatePreview();
+    updateCharCount();
+    var matches = srMatches(query);
+    if (matches.length) srSelectMatch(matches, 0); else srShowCount([], -1);
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    var key = event.key.toLowerCase();
+    if (key === "f") {
+      event.preventDefault();
+      openSearchPanel(!srPanel.hidden);
+    } else if (key === "h") {
+      // Ctrl+H: bring up the panel with any current single-line selection
+      // pre-filled as the search term.
+      event.preventDefault();
+      openSearchPanel(true);
+    }
+  });
+
+  // --- Init ---------------------------------------------------------------
+
+  schemeSelect.value = initialScheme();
+  applyScheme(initialScheme());
+  applyMode(initialMode());
+  setFileName("untitled.md");
+  updateCharCount();
+  if (editor.value) updatePreview();
+})();
+</script>
+</body>
+</html>
